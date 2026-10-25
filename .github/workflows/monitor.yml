@@ -24,9 +24,25 @@ jobs:
       fail-fast: false        # 一组失败不影响另一组
       matrix:
         include:
-          - name: A            # 15 天理想区间 10/27→11/10，全区
+          # 递减阶梯：从 10/27 起连住 N 晚，各档独立去重，"从无到有"即推
+          # （能住更长的会同时出现在更低档位，属预期）
+          - name: A15          # 15 晚：10/27→11/10（理想档）
             config: config.ci.a.yaml
-          - name: B            # 逐日全市监控（市区开放第一时间知道）
+          - name: D13          # 13 晚：10/27→11/08
+            config: config.ci.d13.yaml
+          - name: D11          # 11 晚：10/27→11/06
+            config: config.ci.d11.yaml
+          - name: D9           # 9 晚：10/27→11/04
+            config: config.ci.d9.yaml
+          - name: D7           # 7 晚：10/27→11/02
+            config: config.ci.d7.yaml
+          - name: D5           # 5 晚：10/27→10/31
+            config: config.ci.d5.yaml
+          - name: D3           # 3 晚：10/27→10/29
+            config: config.ci.d3.yaml
+          - name: D2           # 2 晚：10/27→10/28（阶梯地板）
+            config: config.ci.d2.yaml
+          - name: B            # 市区 7 区逐日增量（不设日期，优先盯市区）
             config: config.ci.b.yaml
     name: check-${{ matrix.name }}
     steps:
