@@ -1,4 +1,8 @@
-# GitHub Actions 监控组 B：入住 9/7 → 离店 9/12，仅个人，全区
+# GitHub Actions 监控组 B：逐日监控市区 7 区，仅个人
+# 不设日期区间 = 逐日判定：市区驿站出现新的可约日期就推（正文带每日房量明细）。
+# 探查结论（2026-10-25）：市区当前没有能连住 15 天的房源（A 组在盯），
+# 但长宁/静安/虹口/杨浦/闵行/宝山等有零散可约日期，本组盯它们的增量。
+# 注意：与 A 组（config.ci.a.yaml，15 天区间组）并行，各自独立去重缓存。
 # 不含密钥；Bark key 由 Actions Secret（BARK_URL）注入。
 
 base_url: "https://qnyz.shyouth.net/qnyzApi"
@@ -10,9 +14,10 @@ filters:
   name: ""
   user_type: 2
   apply_scope: "personal"
-  districts: []
-  date_from: "2026-09-11"
-  date_to: "2026-09-14"
+  districts: ["黄浦区", "徐汇区", "长宁区", "静安区", "普陀区", "虹口区", "杨浦区"]  # 市区 7 区；想改全区清空即可
+  only_stations: []
+  date_from: ""          # 留空 = 逐日模式，任意一天有空就推（新日期才推）
+  date_to: ""
   min_house_count: 0
   min_apply_number: 1
 
