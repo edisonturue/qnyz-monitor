@@ -277,8 +277,12 @@ def api_ladder():
             "houseCount": s.get("houseCount"),
             "commute": M.commute_minutes(s), "streak": n,
             "end": str(cur - timedelta(days=1)) if n else "",
-            "total": sum(v for d, v in av.items() if d >= start_d),
-            "dates": [{"date": str(d), "num": av[d]} for d in sorted(av) if d >= start_d],
+            # 只统计连续段：可约合计与日期明细都截止在断档处
+            # （驿站规则为连续申请，断档后的日期不能算进“可住满”）
+            "total": sum(av[cur - timedelta(days=i)] for i in range(1, n + 1)),
+            "dates": [{"date": str(cur - timedelta(days=i)),
+                       "num": av[cur - timedelta(days=i)]}
+                      for i in range(n, 0, -1)],
             "dizhi": s.get("dizhi"), "lxfs": s.get("lxfs"),
             "groupOnly": bool(s.get("groupOnly")),
         })
