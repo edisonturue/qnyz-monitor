@@ -297,7 +297,7 @@ INDEX_HTML = """<!DOCTYPE html>
       <div class="field"><label>申请类型</label>
         <select id="apply_scope" style="padding:7px 9px;border:1px solid var(--bd);border-radius:7px;font-size:14px">
           <option value="all">全部</option>
-          <option value="personal">仅个人可申请</option>
+          <option value="personal" selected>仅个人可申请</option>
           <option value="group">仅供集体申请</option>
         </select>
       </div>
@@ -466,10 +466,28 @@ function renderResults(data, meta){
   }).join("");
 }
 $("#btnPreview").onclick = async () => {
+  const b = $("#btnPreview");
+  if (b.disabled) return;                       // 防连点：重复点击只会排队拖慢
+  const hasRange = $("#date_from").value && $("#date_to").value;
+  const eta = hasRange ? "约 15~30 秒" : "逐日模式需查全部驿站日历，约 30~60 秒";
+  b.disabled = true;
+  b.style.opacity = "0.6";
+  $("#resultMeta").textContent = `⏳ 查询中…（${eta}，请勿重复点击）`;
   toast("查询中…");
-  const r = await fetch("/api/preview",{method:"POST",headers:{"Content-Type":"application/json"},
-    body: JSON.stringify(params())});
-  renderResults(await r.json()); toast("预览完成");
+  try {
+    const r = await fetch("/api/preview",{method:"POST",headers:{"Content-Type":"application/json"},
+      body: JSON.stringify(params())});
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const data = await r.json();
+    renderResults(data);
+    toast(`预览完成 · ${data.count} 家`);
+  } catch (e) {
+    $("#resultMeta").textContent = "❌ 查询失败：" + (e.message || e) + "（后端仍在运行，可稍后重试）";
+    toast("查询失败");
+  } finally {
+    b.disabled = false;
+    b.style.opacity = "";
+  }
 };
 $("#btnStart").onclick = async () => {
   const r = await fetch("/api/start",{method:"POST",headers:{"Content-Type":"application/json"},
