@@ -230,8 +230,17 @@ def run_once(client, cfg, state, do_notify=True, persist=True, notify_gate=None)
     for s, dates in results:
         logger.info("可预约: %s", fmt_station(s, dates))
 
-    # 去重：有区间时按“该驿站能否满足此入住区间”去重；无区间时按可约日期集合去重
-    stay_token = f"stay:{date_from}~{date_to}"
+    # 去重：有区间时按“能住满 N 天”的时长去重，而非具体日期区间——
+    # CI 里锚点日期会随预订窗口滚动（gen_ci_configs.py），按日期去重会导致
+    # 锚点每滚一天就全量重推；按时长去重则只有“从住不满变住得满”才推。
+    stay_token = None
+    if has_range:
+        try:
+            from datetime import date as _d
+            nights = (_d.fromisoformat(date_to) - _d.fromisoformat(date_from)).days + 1
+            stay_token = f"stay:{nights}d"
+        except ValueError:
+            stay_token = f"stay:{date_from}~{date_to}"
     new_hits = []
     for s, dates in results:
         sid = str(s["id"])

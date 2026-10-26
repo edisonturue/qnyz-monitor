@@ -55,6 +55,12 @@ jobs:
       - name: Install deps
         run: pip install requests PyYAML
 
+      # 锚点自动滚动：每轮重算「明天起最早可订日」并重新生成阶梯配置
+      # （预订窗口只开到后天左右且逐日滚动，写死日期会查空；配合 monitor.py
+      # 的时长制指纹，锚点滚动不会重复推送）
+      - name: Regenerate ladder configs (rolling anchor)
+        run: python gen_ci_configs.py
+
       # 每组独立的去重缓存（key 前缀含组名，互不覆盖）
       - name: Restore dedup state (${{ matrix.name }})
         uses: actions/cache@v4

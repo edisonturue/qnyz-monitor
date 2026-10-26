@@ -1,7 +1,6 @@
-# GitHub Actions 监控组 A：理想区间 10/27→11/10（15 晚），仅个人，全区
-# 探查结论（2026-10-25）：全部 92 家日历最早只开到 10/27；全市能连住 15 天的
-# 只有 6 家（崇明/金山/青浦），市区 0 家。本组盯"能住满 15 天"的从无到有。
-# 不含密钥；Bark key 由 Actions Secret（BARK_URL）注入。
+# 由 gen_ci_configs.py 每轮自动生成，手改会被覆盖（锚点会滚动）。
+# 档位 15 天：2026-10-28 -> 2026-11-11（锚点=明天起最早可订日），仅个人，通勤 2h 内区域。
+# 去重按"能住满 15 天"的时长计，锚点滚动不重推；想改档位/区域改 gen_ci_configs.py。
 
 base_url: "https://qnyz.shyouth.net/qnyzApi"
 verify_ssl: false
@@ -12,15 +11,15 @@ filters:
   name: ""
   user_type: 2
   apply_scope: "personal"
-  districts: []
+  districts: ['黄浦区', '徐汇区', '长宁区', '静安区', '普陀区', '虹口区', '杨浦区', '浦东新区', '闵行区', '宝山区', '嘉定区', '松江区', '青浦区', '奉贤区']
   only_stations: []
-  date_from: "2026-10-27"
-  date_to: "2026-11-10"
+  date_from: "2026-10-28"
+  date_to: "2026-11-11"
   min_house_count: 0
   min_apply_number: 1
 
 notify:
   type: "bark"
-  url: ""          # 由环境变量 QNYZ_NOTIFY_URL 注入
+  url: ""
 
 log_file: ""

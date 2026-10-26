@@ -1,7 +1,6 @@
-# GitHub Actions 递减阶梯 11 天档：2026-10-27→2026-11-06（从 10/27 起连住 11 晚），仅个人，全区
-# 阶梯逻辑：15/13/11/9/7/5/3/2 各一档，某一档"从无到有"就推。
-# 能住更长天数的驿站会同时出现在更低档位，属于预期（各组独立去重）。
-# 不含密钥；Bark key 由 Actions Secret（BARK_URL）注入。
+# 由 gen_ci_configs.py 每轮自动生成，手改会被覆盖（锚点会滚动）。
+# 档位 11 天：2026-10-28 -> 2026-11-07（锚点=明天起最早可订日），仅个人，通勤 2h 内区域。
+# 去重按"能住满 11 天"的时长计，锚点滚动不重推；想改档位/区域改 gen_ci_configs.py。
 
 base_url: "https://qnyz.shyouth.net/qnyzApi"
 verify_ssl: false
@@ -12,15 +11,15 @@ filters:
   name: ""
   user_type: 2
   apply_scope: "personal"
-  districts: []          # 全区兜底；市区增量由 B 组（config.ci.b.yaml）实时盯
+  districts: ['黄浦区', '徐汇区', '长宁区', '静安区', '普陀区', '虹口区', '杨浦区', '浦东新区', '闵行区', '宝山区', '嘉定区', '松江区', '青浦区', '奉贤区']
   only_stations: []
-  date_from: "2026-10-27"
-  date_to: "2026-11-06"
+  date_from: "2026-10-28"
+  date_to: "2026-11-07"
   min_house_count: 0
   min_apply_number: 1
 
 notify:
   type: "bark"
-  url: ""          # 由环境变量 QNYZ_NOTIFY_URL 注入
+  url: ""
 
 log_file: ""
