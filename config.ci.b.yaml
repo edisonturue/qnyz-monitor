@@ -1,6 +1,7 @@
-# GitHub Actions 监控组 B：逐日监控「通勤 2h 内」全部区域，仅个人
+# GitHub Actions 监控组 B：逐日监控「通勤 90 分钟内」全部驿站，仅个人
 # 不设日期区间 = 逐日判定：任何驿站出现新的可约日期就推（正文带每日房量明细）。
 # 覆盖阶梯组顾不到的零散日期；阶梯组（A/D*）盯"从明天起连住 N 天"。
+# 通勤口径：以人民广场为原点、门到门地铁估算（commute.py），>90min 剔除。
 # 不含密钥；Bark key 由 Actions Secret（BARK_URL）注入。
 
 base_url: "https://qnyz.shyouth.net/qnyzApi"
@@ -12,9 +13,8 @@ filters:
   name: ""
   user_type: 2
   apply_scope: "personal"
-  # 通勤 2 小时内白名单：排除崇明区/金山区/临港新片区
-  districts: ["黄浦区", "徐汇区", "长宁区", "静安区", "普陀区", "虹口区", "杨浦区",
-              "浦东新区", "闵行区", "宝山区", "嘉定区", "松江区", "青浦区", "奉贤区"]
+  districts: []          # 不限行政区，改由下面的通勤估算过滤（更精细）
+  max_commute_min: 90    # 到人民广场门到门通勤估算上限；0=不限
   only_stations: []
   date_from: ""          # 留空 = 逐日模式，任意一天有空就推（新日期才推）
   date_to: ""

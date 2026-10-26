@@ -48,6 +48,7 @@ filters:
   date_to: "{t}"
   min_house_count: 0
   min_apply_number: 1
+  max_commute_min: 90   # 到人民广场门到门通勤估算上限（超 1.5h 剔除；0=不限）
 
 notify:
   type: "bark"

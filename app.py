@@ -117,20 +117,26 @@ class MonitorRunner:
 
 
 def stations_to_json(results):
-    """把 run_once 的 [(station, dates)] 转成前端表格用的 JSON，按可约总数降序。"""
+    """把 run_once 的 [(station, dates)] 转成前端表格用的 JSON。
+
+    排序：通勤从近到远优先；通勤相同按可约总数降序（"越近越好"）。
+    """
     out = []
     for s, dates in results:
         out.append({
             "name": s.get("name"),
             "district": s.get("district"),
             "houseCount": s.get("houseCount"),
+            "commute": M.commute_minutes(s),
             "total": sum(n for _, n in dates) if dates else 0,
             "dates": [{"date": d, "num": n} for d, n in (dates or [])],
             "dizhi": s.get("dizhi"),
             "lxfs": s.get("lxfs"),
             "groupOnly": bool(s.get("groupOnly")),
         })
-    out.sort(key=lambda x: x["total"], reverse=True)
+    out.sort(key=lambda x: (x["commute"] is None,
+                            x["commute"] if x["commute"] is not None else 999,
+                            -x["total"]))
     return out
 
 
@@ -151,7 +157,7 @@ def build_cfg(overrides):
     for k in ("name", "date_from", "date_to", "apply_scope"):
         if k in o:
             filters[k] = o.get(k) or ("all" if k == "apply_scope" else "")
-    for k in ("min_apply_number", "min_house_count"):
+    for k in ("min_apply_number", "min_house_count", "max_commute_min"):
         if k in o and o.get(k) not in (None, ""):
             filters[k] = M.to_int(o.get(k), filters.get(k))
     cfg["filters"] = filters
@@ -294,6 +300,7 @@ INDEX_HTML = """<!DOCTYPE html>
       <div class="field"><label>入住日期</label><input type="date" id="date_from"></div>
       <div class="field"><label>离店日期</label><input type="date" id="date_to"></div>
       <div class="field"><label>每日可约数 ≥</label><input type="number" id="min_apply_number" value="1" min="1" style="width:90px"></div>
+      <div class="field"><label>最远通勤(分钟)</label><input type="number" id="max_commute_min" value="90" min="0" title="到人民广场门到门估算，0=不限" style="width:110px"></div>
       <div class="field"><label>申请类型</label>
         <select id="apply_scope" style="padding:7px 9px;border:1px solid var(--bd);border-radius:7px;font-size:14px">
           <option value="all">全部</option>
@@ -328,7 +335,7 @@ INDEX_HTML = """<!DOCTYPE html>
     <h3>结果 <span class="muted" id="resultMeta"></span></h3>
     <div style="overflow:auto">
       <table id="resultTable">
-        <thead><tr><th>驿站</th><th>区域</th><th>可约合计</th><th>可约日期</th><th>地址 / 电话</th></tr></thead>
+        <thead><tr><th>驿站</th><th>区域</th><th>通勤</th><th>可约合计</th><th>可约日期</th><th>地址 / 电话</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
@@ -354,6 +361,7 @@ function params(){
     date_from: $("#date_from").value,
     date_to: $("#date_to").value,
     min_apply_number: $("#min_apply_number").value,
+    max_commute_min: $("#max_commute_min").value,
     // 网页不提供「名称关键字」：按名字筛统一用下面的「指定驿站」勾选。
     // 这里显式传空，避免 config.yaml 里的 filters.name 变成界面上看不见的隐藏条件。
     name: "",
@@ -459,6 +467,7 @@ function renderResults(data, meta){
     return `<tr>
       <td>${s.name||""}${badge}</td>
       <td><span class="tag">${s.district||""}</span></td>
+      <td>${s.commute != null ? "🚇"+s.commute+"min" : "?"}</td>
       <td><b>${s.total}</b> <span class="muted">/共${s.houseCount??"?"}</span></td>
       <td>${ds}</td>
       <td>${s.dizhi||""}<br><span class="muted">☎ ${s.lxfs||""}</span></td>

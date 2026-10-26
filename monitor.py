@@ -20,6 +20,7 @@ import requests
 import yaml
 
 from notifier import send as notify_send
+from commute import estimate_minutes
 from qnyz_client import QnyzClient
 
 # 视为“临时网络问题”的异常：不算运行失败，等下一轮重试
@@ -109,12 +110,22 @@ def match_only(s, keys):
     return any(k == sid or k in name for k in keys)
 
 
+def commute_minutes(s):
+    """驿站到市中心（人民广场）的门到门通勤估算（分钟）；坐标缺失返回 None。"""
+    try:
+        lat, lon = float(s.get("latitude")), float(s.get("longitude"))
+    except (TypeError, ValueError):
+        return None
+    return estimate_minutes(lat, lon, district=s.get("district"))
+
+
 def apply_filters(stations, cfg):
     f = cfg.get("filters") or {}
     districts = [d for d in (f.get("districts") or []) if d]
     # 只盯指定的一家/几家：驿站名关键字或 id，留空=不限
     only = [str(x).strip() for x in (f.get("only_stations") or []) if str(x).strip()]
     min_house_count = to_int(f.get("min_house_count"), 0)
+    max_commute = to_int(f.get("max_commute_min"), 0)  # 0=不限；超出的剔除
     scope = (f.get("apply_scope") or "all").lower()  # all|personal|group
     out = []
     for s in stations:
@@ -124,6 +135,10 @@ def apply_filters(stations, cfg):
             continue
         if min_house_count and (to_int(s.get("houseCount"), 0) < min_house_count):
             continue
+        if max_commute:
+            cm = commute_minutes(s)
+            if cm is None or cm > max_commute:
+                continue
         if scope == "personal" and s.get("groupOnly"):
             continue
         if scope == "group" and not s.get("groupOnly"):
@@ -159,10 +174,13 @@ def available_dates(client, house_id, cfg):
 
 # ── 展示 ──────────────────────────────────────────────────
 def fmt_notify(s, dates, stay=None):
-    """通知用的精简单行：名称[区域] (入住区间/可约日期) 电话。"""
+    """通知用的精简单行：名称[区域] 🚇通勤 (入住区间/可约日期) 电话。"""
     seg = f"{s.get('name','(未知)')}"
     if s.get("district"):
         seg += f"[{s['district']}]"
+    cm = commute_minutes(s)
+    if cm is not None:
+        seg += f" 🚇{cm}min"
     if stay:  # 有入住/离店区间：显示可满足的区间
         seg += f" 可住 {stay}"
         if dates:  # 区间内最少房量
@@ -225,6 +243,13 @@ def run_once(client, cfg, state, do_notify=True, persist=True, notify_gate=None)
                 results.append((s, dates))
     else:
         results = [(s, None) for s in stations]
+
+    # 按通勤从近到远排序：日志与通知正文都按此顺序（越近越靠前）
+    def _commute_sort_key(item):
+        v = commute_minutes(item[0])
+        return (v is None, v if v is not None else 999)
+
+    results.sort(key=_commute_sort_key)
 
     # 打印当前可用
     for s, dates in results:
