@@ -215,6 +215,79 @@ def api_preview():
     return jsonify({"count": len(out), "stations": out})
 
 
+@app.post("/api/ladder")
+def api_ladder():
+    """递减阶梯扫描。
+
+    起点：填了入住日期就用它；留空则自动取「明天起最早可订日」
+    （与 CI 监控的滚动锚点一致）。一次拉全量日历后本地计算每家从起点
+    起能连住多少天，输出 15→1 各档统计，按「连住降序 + 通勤升序」返回。
+    """
+    from concurrent.futures import ThreadPoolExecutor
+    from datetime import date, timedelta
+
+    cfg = build_cfg(request.get_json(silent=True) or {})
+    f = cfg.get("filters") or {}
+    client = QnyzClient(base_url=cfg.get("base_url", "https://qnyz.shyouth.net/qnyzApi"),
+                        verify=cfg.get("verify_ssl", True))
+    stations = M.apply_filters(M.get_stations(client, cfg), cfg)
+    workers = M.to_int(cfg.get("concurrency"), 10)
+
+    def fetch(s):
+        try:
+            return s, client.calendar(s["id"])
+        except Exception:
+            return s, []
+
+    with ThreadPoolExecutor(max_workers=workers) as ex:
+        pairs = list(ex.map(fetch, stations))
+
+    tomorrow = date.today() + timedelta(days=1)
+    start_s = (f.get("date_from") or "").strip()
+    start_d = None
+    if start_s:
+        try:
+            start_d = date.fromisoformat(start_s)
+        except ValueError:
+            start_d = None
+
+    parsed = []
+    for s, cal in pairs:
+        avail = {}
+        for d in cal or []:
+            try:
+                dd = date.fromisoformat(str(d.get("applyDate"))[:10])
+            except (TypeError, ValueError):
+                continue
+            avail[dd] = M.to_int(d.get("applyNumber"), 0)
+        parsed.append((s, avail))
+
+    if start_d is None:
+        cand = [d for _, av in parsed for d in av if d >= tomorrow and av[d] >= 1]
+        start_d = min(cand) if cand else tomorrow
+
+    rows = []
+    for s, av in parsed:
+        n, cur = 0, start_d
+        while av.get(cur, 0) >= 1:
+            n += 1
+            cur += timedelta(days=1)
+        rows.append({
+            "name": s.get("name"), "district": s.get("district"),
+            "houseCount": s.get("houseCount"),
+            "commute": M.commute_minutes(s), "streak": n,
+            "end": str(cur - timedelta(days=1)) if n else "",
+            "total": sum(v for d, v in av.items() if d >= start_d),
+            "dates": [{"date": str(d), "num": av[d]} for d in sorted(av) if d >= start_d],
+            "dizhi": s.get("dizhi"), "lxfs": s.get("lxfs"),
+            "groupOnly": bool(s.get("groupOnly")),
+        })
+    ok = [r for r in rows if r["streak"] > 0]
+    ok.sort(key=lambda r: (-r["streak"], r["commute"] is None, r["commute"] or 999))
+    bands = {n: sum(1 for r in ok if r["streak"] >= n) for n in range(15, 0, -1)}
+    return jsonify({"anchor": str(start_d), "count": len(ok), "bands": bands, "stations": ok})
+
+
 @app.get("/api/latest")
 def api_latest():
     """后台监控每轮的最新结果（供网页运行时自动刷新表格）。"""
@@ -325,6 +398,7 @@ INDEX_HTML = """<!DOCTYPE html>
   <div class="card">
     <div class="btns">
       <button class="b-prev" id="btnPreview">🔍 预览当前可约</button>
+      <button class="b-prev" id="btnLadder" title="从起点日起按 15→1 天逐档扫描，自动算能连住多久">🪜 递减阶梯扫描</button>
       <button class="b-start" id="btnStart">▶ 启动监控</button>
       <button class="b-stop" id="btnStop">⏹ 停止监控</button>
     </div>
@@ -335,7 +409,7 @@ INDEX_HTML = """<!DOCTYPE html>
     <h3>结果 <span class="muted" id="resultMeta"></span></h3>
     <div style="overflow:auto">
       <table id="resultTable">
-        <thead><tr><th>驿站</th><th>区域</th><th>通勤</th><th>可约合计</th><th>可约日期</th><th>地址 / 电话</th></tr></thead>
+        <thead><tr><th>驿站</th><th>区域</th><th>连住</th><th>通勤</th><th>可约合计</th><th>可约日期</th><th>地址 / 电话</th></tr></thead>
         <tbody></tbody>
       </table>
     </div>
@@ -467,6 +541,7 @@ function renderResults(data, meta){
     return `<tr>
       <td>${s.name||""}${badge}</td>
       <td><span class="tag">${s.district||""}</span></td>
+      <td>${s.streak ? "<b>"+s.streak+"</b> 天" : "-"}</td>
       <td>${s.commute != null ? "🚇"+s.commute+"min" : "?"}</td>
       <td><b>${s.total}</b> <span class="muted">/共${s.houseCount??"?"}</span></td>
       <td>${ds}</td>
@@ -493,6 +568,33 @@ $("#btnPreview").onclick = async () => {
   } catch (e) {
     $("#resultMeta").textContent = "❌ 查询失败：" + (e.message || e) + "（后端仍在运行，可稍后重试）";
     toast("查询失败");
+  } finally {
+    b.disabled = false;
+    b.style.opacity = "";
+  }
+};
+$("#btnLadder").onclick = async () => {
+  const b = $("#btnLadder");
+  if (b.disabled) return;
+  b.disabled = true;
+  b.style.opacity = "0.6";
+  $("#resultMeta").textContent = "⏳ 阶梯扫描中…（拉取全部驿站日历后本地计算 15→1 天各档，约 30~60 秒）";
+  toast("阶梯扫描中…");
+  try {
+    const r = await fetch("/api/ladder",{method:"POST",headers:{"Content-Type":"application/json"},
+      body: JSON.stringify(params())});
+    if (!r.ok) throw new Error("HTTP " + r.status);
+    const data = await r.json();
+    renderResults(data);
+    const parts = [15,10,7,5,3,2,1]
+      .filter(n => data.bands && data.bands[n])
+      .map(n => `≥${n}天 ${data.bands[n]}家`);
+    $("#resultMeta").textContent =
+      `🪜 起点 ${data.anchor} · 有房 ${data.count} 家 · ` + parts.join(" ｜ ");
+    toast(`阶梯扫描完成 · ${data.count} 家`);
+  } catch (e) {
+    $("#resultMeta").textContent = "❌ 阶梯扫描失败：" + (e.message || e);
+    toast("阶梯扫描失败");
   } finally {
     b.disabled = false;
     b.style.opacity = "";
